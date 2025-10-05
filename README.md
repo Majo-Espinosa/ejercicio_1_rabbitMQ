@@ -1,5 +1,12 @@
 # RabbitMQ procesamiento de datos
-ITEMS SOLICITADOS:
+### NOMBRES:
+ Marìa Josè Espinosa Cañòn
+
+ Julian Camilo Ceron
+
+
+
+### ITEMS SOLICITADOS:
 
 Para comprobar el funcionamiento, inicialmente construimos el docker-compose:
 ![Diagrama](images/image2.png)
