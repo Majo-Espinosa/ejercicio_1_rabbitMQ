@@ -1,0 +1,9 @@
+{
+  "name": "worker",
+  "version": "1.0.0",
+  "main": "Worker.js",
+  "license": "MIT",
+  "dependencies": {
+    "amqplib": "^0.10.3"
+  }
+}
