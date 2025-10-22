@@ -1,49 +1,53 @@
-const amqp = require('amqplib');
+import amqp from "amqplib";
 
 async function sendMessages() {
-  try {
-    // Leer usuario y contraseña desde variables de entorno o usar valores por defecto
-    const user = process.env.RABBITMQ_DEFAULT_USER || 'guest';
-    const pass = process.env.RABBITMQ_DEFAULT_PASS || 'guest';
-    const host = process.env.RABBITMQ_HOST || 'rabbitmq'; // nombre del servicio en docker-compose
-    const exchange = 'logs_complejidad'; // exchange tipo fanout
+  const user = process.env.RABBITMQ_DEFAULT_USER || "guest";
+  const pass = process.env.RABBITMQ_DEFAULT_PASS || "guest";
+  const host = process.env.RABBITMQ_HOST || "rabbitmq";
+  const exchange = "direct_logs"; 
 
-    // 1️⃣ Conexión a RabbitMQ
+  try {
     const connection = await amqp.connect(`amqp://${user}:${pass}@${host}:5672`);
     const channel = await connection.createChannel();
 
-    // 2️⃣ Crear/Asegurar el exchange tipo fanout
-    await channel.assertExchange(exchange, 'fanout', { durable: false });
+    // Exchange tipo direct
+    await channel.assertExchange(exchange, "direct", { durable: false });
 
-    console.log('🚀 Conectado a RabbitMQ — Enviando tareas a todos los workers...\n');
+    console.log("[PRODUCER] Generando 10 tareas...\n");
 
-    // 3️⃣ Generar y enviar 10 tareas con distintas complejidades
+    // Tipos (claves) de mensajes
+    const tipos = ["tarea_aburrida_distribuidos:(", "tarea_horrible"];
+
     for (let i = 1; i <= 10; i++) {
+      const tipo = tipos[Math.floor(Math.random() * tipos.length)]; 
       const complejidad = Math.floor(Math.random() * 5) + 1;
-      const tarea = {
-        id: i,
+      const id = Math.floor(Math.random() * 10000);
+
+      const mensaje = {
+        id,
         complejidad,
-        payload: `Tarea #${i}`,
+        tipo,
       };
 
-      // Publicar mensaje al exchange
-      channel.publish(exchange, '', Buffer.from(JSON.stringify(tarea)));
+      //  Enviamos al exchange con la clave (routing key)
+      channel.publish(exchange, tipo, Buffer.from(JSON.stringify(mensaje)));
 
-      console.log(`[x] Enviada tarea ${i} (complejidad=${complejidad})`);
+      console.log(
+        `[PRODUCER] Tarea enviada: ID ${id}, Complejidad: ${complejidad}, Tipo: ${tipo}`
+      );
     }
 
-    // 4️⃣ Esperar un poco antes de cerrar conexión
+    console.log("\n[PRODUCER] Todas las tareas han sido enviadas.\n");
+
     setTimeout(async () => {
       await channel.close();
       await connection.close();
-      console.log('\n✅ Productor finalizado, todas las tareas enviadas.');
       process.exit(0);
     }, 500);
   } catch (err) {
-    console.error('❌ Error en Producer:', err);
+    console.error(" Error en Producer:", err);
     process.exit(1);
   }
 }
 
-// Ejecutar el productor
 sendMessages();

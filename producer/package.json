@@ -1,6 +1,7 @@
 {
   "name": "producer",
   "version": "1.0.0",
+  "type": "module",
   "main": "Producer.js",
   "license": "MIT",
   "dependencies": {

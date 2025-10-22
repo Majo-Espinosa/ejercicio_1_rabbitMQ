@@ -1,62 +1,37 @@
-const amqp = require('amqplib');
+import amqp from "amqplib";
 
-async function receiveMessages() {
+const RABBITMQ_HOST = process.env.RABBITMQ_HOST || "rabbitmq";
+const WORKER_NAME = process.env.WORKER_NAME || "Worker";
+const CLAVES = (process.env.CLAVES || "").split(",");
+
+(async () => {
   try {
-    // Configuración desde variables de entorno
-    const user = process.env.RABBITMQ_DEFAULT_USER || 'guest';
-    const pass = process.env.RABBITMQ_DEFAULT_PASS || 'guest';
-    const host = process.env.RABBITMQ_HOST || 'rabbitmq';
-    const exchange = 'logs_complejidad';
-    const workerName = process.env.WORKER_NAME || 'worker';
+    const conn = await amqp.connect(`amqp://${RABBITMQ_HOST}`);
+    const ch = await conn.createChannel();
+    const exchange = "direct_logs";
 
-    // 1️⃣ Conexión a RabbitMQ
-    const connection = await amqp.connect(`amqp://${user}:${pass}@${host}:5672`);
-    const channel = await connection.createChannel();
+    await ch.assertExchange(exchange, "direct", { durable: false });
+    const q = await ch.assertQueue("", { exclusive: true });
 
-    // 2️⃣ Declarar exchange tipo fanout
-    await channel.assertExchange(exchange, 'fanout', { durable: false });
+    for (const clave of CLAVES) {
+      await ch.bindQueue(q.queue, exchange, clave);
+      console.log(`[${WORKER_NAME}] Suscrito a tareas de tipo '${clave}'`);
+    }
 
-    // 3️⃣ Crear cola temporal exclusiva para este worker
-    const q = await channel.assertQueue('', { exclusive: true });
+    console.log(`[${WORKER_NAME}] Iniciado y listo para procesar tareas suscrito al exchange '${exchange}'\n`);
 
-    // 4️⃣ Enlazar la cola al exchange
-    await channel.bindQueue(q.queue, exchange, '');
+    ch.consume(q.queue, async (msg) => {
+      if (msg.content) {
+        const tarea = JSON.parse(msg.content.toString());
+        console.log(`[${WORKER_NAME}] Recibió tarea ${tarea.id} (complejidad: ${tarea.complejidad}, tipo: ${tarea.tipo})`);
 
-    console.log(`🐇 [${workerName}] Esperando tareas en exchange "${exchange}"...\n`);
+        await new Promise((resolve) => setTimeout(resolve, tarea.complejidad * 1000));
 
-    // 5️⃣ Consumir mensajes (todos los workers recibirán todas las tareas)
-    channel.consume(
-      q.queue,
-      async (msg) => {
-        if (msg) {
-          const data = JSON.parse(msg.content.toString());
-          const { id, complejidad, payload } = data;
+        console.log(`[${WORKER_NAME}] Tarea completada: ${tarea.id}\n`);
+      }
+    }, { noAck: true });
 
-          console.log(
-            `[${workerName}] Recibió tarea #${id} (${payload}) — complejidad=${complejidad}`
-          );
-
-          // Simular procesamiento proporcional a la complejidad
-          await new Promise((resolve) => setTimeout(resolve, complejidad * 1000));
-
-          console.log(`[${workerName}] ✅ Completó tarea #${id} (complejidad=${complejidad})\n`);
-        }
-      },
-      { noAck: true } // fanout: sin ACK ni persistencia
-    );
-
-    // Cierre ordenado
-    process.on('SIGINT', async () => {
-      console.log(`[${workerName}] Cerrando conexión...`);
-      await channel.close();
-      await connection.close();
-      process.exit(0);
-    });
   } catch (err) {
-    console.error('❌ Error en Worker:', err);
-    process.exit(1);
+    console.error(`Error en ${WORKER_NAME}:`, err);
   }
-}
-
-// Ejecutar el consumidor
-receiveMessages();
+})();
