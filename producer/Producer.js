@@ -6,20 +6,19 @@ async function sendMessages() {
     const user = process.env.RABBITMQ_DEFAULT_USER || 'guest';
     const pass = process.env.RABBITMQ_DEFAULT_PASS || 'guest';
     const host = process.env.RABBITMQ_HOST || 'rabbitmq'; // nombre del servicio en docker-compose
-    const queue = 'tareas_distribuidas';
+    const exchange = 'logs_complejidad'; // exchange tipo fanout
 
-    // 1. Conexión a RabbitMQ
+    // 1️⃣ Conexión a RabbitMQ
     const connection = await amqp.connect(`amqp://${user}:${pass}@${host}:5672`);
     const channel = await connection.createChannel();
 
-    // 2. Crear/Asegurar la cola (durable para no perder mensajes)
-    await channel.assertQueue(queue, { durable: true });
+    // 2️⃣ Crear/Asegurar el exchange tipo fanout
+    await channel.assertExchange(exchange, 'fanout', { durable: false });
 
-    console.log('Conectado a RabbitMQ — Enviando tareas...\n');
+    console.log('🚀 Conectado a RabbitMQ — Enviando tareas a todos los workers...\n');
 
-    // 3. Generar y enviar 10 tareas con distintas complejidades (1–5)
+    // 3️⃣ Generar y enviar 10 tareas con distintas complejidades
     for (let i = 1; i <= 10; i++) {
-      // Nivel de complejidad aleatorio (1 a 5)
       const complejidad = Math.floor(Math.random() * 5) + 1;
       const tarea = {
         id: i,
@@ -27,26 +26,24 @@ async function sendMessages() {
         payload: `Tarea #${i}`,
       };
 
-      // Convertir a buffer y enviar mensaje persistente
-      channel.sendToQueue(queue, Buffer.from(JSON.stringify(tarea)), {
-        persistent: true,
-      });
+      // Publicar mensaje al exchange
+      channel.publish(exchange, '', Buffer.from(JSON.stringify(tarea)));
 
       console.log(`[x] Enviada tarea ${i} (complejidad=${complejidad})`);
     }
 
-    // 4. Esperar un poco antes de cerrar conexión para asegurar envío
+    // 4️⃣ Esperar un poco antes de cerrar conexión
     setTimeout(async () => {
       await channel.close();
       await connection.close();
-      console.log('\n Productor finalizado, todas las tareas enviadas.');
+      console.log('\n✅ Productor finalizado, todas las tareas enviadas.');
       process.exit(0);
     }, 500);
   } catch (err) {
-    console.error(' Error en Producer:', err);
+    console.error('❌ Error en Producer:', err);
     process.exit(1);
   }
 }
 
-// Ejecutar una vez para enviar todas las tareas
+// Ejecutar el productor
 sendMessages();
